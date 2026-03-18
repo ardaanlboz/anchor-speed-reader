@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Anchor Reader</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Pivot-Letter Speed Reading</p>
+          <h1>Anchor Reader</h1>
+          <p class="hero-copy">
+            Upload a book-like text file or paste your own writing, then read it
+            one anchored word at a time with a fixed focal point.
+          </p>
+        </div>
+        <div class="hero-chip">
+          <span id="sourceLabel">No source loaded</span>
+          <strong id="wordCount">0 words</strong>
+        </div>
+      </header>
+
+      <main class="app-grid">
+        <section class="panel panel-input">
+          <div class="panel-header">
+            <h2>Source</h2>
+            <button id="sampleButton" class="ghost-button" type="button">
+              Load Sample
+            </button>
+          </div>
+
+          <label class="field-label" for="textInput">Paste text</label>
+          <textarea
+            id="textInput"
+            spellcheck="false"
+            placeholder="Paste an article, chapter, essay, or notes here."
+          ></textarea>
+
+          <div class="input-actions">
+            <button id="loadTextButton" class="primary-button" type="button">
+              Use This Text
+            </button>
+            <button id="clearButton" class="ghost-button" type="button">
+              Clear
+            </button>
+          </div>
+
+          <div class="upload-block" id="dropZone">
+            <div>
+              <p class="upload-title">Upload a text-based book file</p>
+              <p class="upload-copy">
+                Supports readable text files like <code>.txt</code>,
+                <code>.md</code>, <code>.rtf</code>, and <code>.html</code>.
+              </p>
+            </div>
+            <label class="upload-button" for="fileInput">Choose File</label>
+            <input
+              id="fileInput"
+              type="file"
+              accept=".txt,.md,.html,.htm,.rtf,text/plain,text/html"
+            />
+          </div>
+
+          <div class="upload-block">
+            <div>
+              <p class="upload-title">Upload a PDF</p>
+              <p class="upload-copy">
+                Extracts selectable text and falls back to OCR for scanned pages.
+              </p>
+            </div>
+            <label class="upload-button" for="pdfInput">Choose PDF</label>
+            <input id="pdfInput" type="file" accept=".pdf,application/pdf" />
+          </div>
+
+          <p id="statusMessage" class="status-message" aria-live="polite">
+            Load some text to start reading.
+          </p>
+        </section>
+
+        <section class="panel panel-reader">
+          <div class="reader-header">
+            <div>
+              <p class="field-label">Reader</p>
+              <h2>Steady Focus View</h2>
+            </div>
+            <div class="reader-header-actions">
+              <button id="extendButton" class="ghost-button" type="button">
+                Extend
+              </button>
+              <div class="progress-block">
+                <span id="progressLabel">0 / 0</span>
+                <span id="percentLabel">0%</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="reader-stage" aria-live="polite">
+            <div class="focus-rail top">
+              <span class="focus-tick"></span>
+            </div>
+
+            <div class="word-shell" id="wordShell">
+              <span id="wordLeft" class="word-part word-left"></span>
+              <span id="wordPivot" class="word-part word-pivot">A</span>
+              <span id="wordRight" class="word-part word-right">nchor</span>
+            </div>
+
+            <div class="focus-rail bottom">
+              <span class="focus-tick"></span>
+            </div>
+          </div>
+
+          <div class="transport">
+            <button id="backButton" class="ghost-button" type="button">
+              Back
+            </button>
+            <button id="playButton" class="primary-button" type="button">
+              Play
+            </button>
+            <button id="nextButton" class="ghost-button" type="button">
+              Next
+            </button>
+            <button id="restartButton" class="ghost-button" type="button">
+              Restart
+            </button>
+          </div>
+
+          <div class="control-grid">
+            <label class="control-card" for="speedSlider">
+              <span>Speed</span>
+              <div class="control-inline">
+                <input
+                  id="speedSlider"
+                  type="range"
+                  min="100"
+                  max="1000"
+                  step="10"
+                  value="350"
+                />
+                <input
+                  id="speedNumber"
+                  class="number-input"
+                  type="number"
+                  min="100"
+                  max="1000"
+                  step="10"
+                  value="350"
+                />
+                <span class="unit">WPM</span>
+              </div>
+              <div class="time-comparison" aria-live="polite">
+                <p class="time-comparison-title">Reading Time Comparison</p>
+                <div class="time-comparison-grid">
+                  <div class="time-stat">
+                    <span class="time-stat-label">At 250 WPM</span>
+                    <strong id="averageTimeValue">0 min</strong>
+                  </div>
+                  <div class="time-stat">
+                    <span class="time-stat-label">At current speed</span>
+                    <strong id="currentSpeedTimeValue">0 min</strong>
+                  </div>
+                  <div class="time-stat time-stat-accent">
+                    <span class="time-stat-label">Time saved</span>
+                    <strong id="timeSavedValue">0 min</strong>
+                  </div>
+                </div>
+              </div>
+            </label>
+
+            <label class="control-card" for="sizeSlider">
+              <span>Word size</span>
+              <div class="control-inline">
+                <input
+                  id="sizeSlider"
+                  type="range"
+                  min="56"
+                  max="132"
+                  step="2"
+                  value="88"
+                />
+                <span id="sizeValue" class="unit">88 px</span>
+              </div>
+            </label>
+
+            <label class="control-card" for="seekSlider">
+              <span>Position</span>
+              <div class="control-inline">
+                <input id="seekSlider" type="range" min="0" max="0" value="0" />
+              </div>
+            </label>
+
+            <label class="control-card toggle-card" for="naturalPauseToggle">
+              <span>Rhythm</span>
+              <div class="toggle-inline">
+                <input id="naturalPauseToggle" type="checkbox" checked />
+                <div>
+                  <strong>Natural pauses</strong>
+                  <p class="toggle-copy">
+                    Adds a little extra time after longer words and punctuation.
+                  </p>
+                </div>
+              </div>
+            </label>
+          </div>
+
+          <div class="context-panel">
+            <div class="panel-header">
+              <h3>Reading Context</h3>
+              <span id="readingTime">0 min</span>
+            </div>
+            <p id="contextPreview" class="context-preview">
+              Your nearby words will appear here once text is loaded.
+            </p>
+            <p class="helper-copy">
+              Tip: your text, speed, and last position are saved in this browser.
+            </p>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script
+      src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"
+      referrerpolicy="no-referrer"
+    ></script>
+    <script
+      src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"
+      referrerpolicy="no-referrer"
+    ></script>
+    <script src="./app.js"></script>
+  </body>
+</html>
