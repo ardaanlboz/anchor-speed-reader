@@ -14,6 +14,7 @@ const state = {
 const STORAGE_KEY = "anchor-reader-state-v1";
 const PDF_WORKER_SRC = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 const AVERAGE_READING_WPM = 250;
+const OCR_BATCH_SIZE = 5;
 const sampleText = `Speed reading works best when your eyes have a stable place to aim. Anchor Reader keeps the pivot letter fixed, so each new word lands in the same visual position while you control the pace. Load your own chapter, article, or notes and settle into a cleaner rhythm.`;
 
 const elements = {
@@ -425,7 +426,12 @@ function setStatus(message) {
   elements.statusMessage.textContent = message;
 }
 
-function loadText(text, sourceName) {
+function loadText(text, sourceName, options = {}) {
+  const {
+    resetPosition = true,
+    stopPlaybackFirst = true,
+    statusMessage,
+  } = options;
   const cleaned = extractReadableText(text).replace(/\u00a0/g, " ").trim();
   const words = tokenize(cleaned);
 
@@ -441,14 +447,30 @@ function loadText(text, sourceName) {
     return;
   }
 
-  stopPlayback();
+  if (stopPlaybackFirst) {
+    stopPlayback();
+  }
+
   state.words = words;
-  state.currentIndex = 0;
+  state.currentIndex = resetPosition
+    ? 0
+    : Math.min(state.currentIndex, Math.max(words.length - 1, 0));
   state.rawText = cleaned;
   state.sourceName = sourceName;
   renderAll();
   persistState();
-  setStatus(`Loaded ${words.length.toLocaleString()} words from ${sourceName}.`);
+  setStatus(statusMessage || `Loaded ${words.length.toLocaleString()} words from ${sourceName}.`);
+}
+
+function resetLoadedText(sourceName = "") {
+  stopPlayback();
+  state.words = [];
+  state.currentIndex = 0;
+  state.rawText = "";
+  state.sourceName = sourceName;
+  elements.textInput.value = "";
+  renderAll();
+  persistState();
 }
 
 async function loadFile(file) {
@@ -564,7 +586,7 @@ async function extractTextFromPdf(file) {
   return pages.filter(Boolean).join("\n\n");
 }
 
-async function extractTextFromPdfWithOcr(file) {
+async function extractTextFromPdfWithOcr(file, onBatchComplete = null) {
   if (!configurePdfParser()) {
     throw new Error("PDF support is unavailable because the PDF parser could not be loaded.");
   }
@@ -576,6 +598,7 @@ async function extractTextFromPdfWithOcr(file) {
   const buffer = new Uint8Array(await file.arrayBuffer());
   const pdf = await window.pdfjsLib.getDocument({ data: buffer }).promise;
   const pages = [];
+  let batchPages = [];
 
   for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
     setStatus(`OCR scanning ${file.name}: rendering page ${pageNumber} of ${pdf.numPages}...`);
@@ -612,11 +635,26 @@ async function extractTextFromPdfWithOcr(file) {
 
     if (ocrText) {
       pages.push(ocrText);
+      batchPages.push(ocrText);
     }
 
     canvas.width = 0;
     canvas.height = 0;
     page.cleanup?.();
+
+    const isBatchBoundary =
+      pageNumber % OCR_BATCH_SIZE === 0 || pageNumber === pdf.numPages;
+
+    if (isBatchBoundary && typeof onBatchComplete === "function") {
+      await onBatchComplete({
+        completedPages: pageNumber,
+        totalPages: pdf.numPages,
+        chunkText: batchPages.join("\n\n").trim(),
+        accumulatedText: pages.join("\n\n").trim(),
+        isFinal: pageNumber === pdf.numPages,
+      });
+      batchPages = [];
+    }
   }
 
   return pages.join("\n\n").trim();
@@ -634,7 +672,46 @@ async function loadPdf(file) {
 
     if (!text.trim()) {
       setStatus(`No selectable text found in ${file.name}. Starting OCR...`);
-      text = await extractTextFromPdfWithOcr(file);
+      resetLoadedText(file.name);
+
+      let hasPublishedOcrText = false;
+      let publishedText = "";
+
+      text = await extractTextFromPdfWithOcr(file, async ({
+        completedPages,
+        totalPages,
+        chunkText,
+        accumulatedText,
+        isFinal,
+      }) => {
+        if (chunkText) {
+          publishedText = publishedText
+            ? `${publishedText}\n\n${chunkText}`
+            : chunkText;
+          elements.textInput.value = publishedText;
+          loadText(publishedText, file.name, {
+            resetPosition: !hasPublishedOcrText,
+            stopPlaybackFirst: !hasPublishedOcrText,
+            statusMessage: isFinal
+              ? `OCR complete for ${file.name}. Loaded ${tokenize(accumulatedText).length.toLocaleString()} words from ${file.name}.`
+              : `OCR progress for ${file.name}: ${completedPages} of ${totalPages} pages ready.`,
+          });
+          hasPublishedOcrText = true;
+          return;
+        }
+
+        if (!isFinal) {
+          setStatus(
+            `OCR progress for ${file.name}: ${completedPages} of ${totalPages} pages complete. No readable text found yet.`
+          );
+        }
+      });
+
+      if (text.trim() && hasPublishedOcrText) {
+        setStatus(
+          `OCR complete for ${file.name}. Loaded ${tokenize(text).length.toLocaleString()} words from ${file.name}.`
+        );
+      }
     }
 
     if (!text.trim()) {
@@ -642,8 +719,15 @@ async function loadPdf(file) {
       return;
     }
 
-    elements.textInput.value = text.trim();
-    loadText(text, file.name);
+    const normalizedText = extractReadableText(text).replace(/\u00a0/g, " ").trim();
+
+    if (elements.textInput.value.trim() !== normalizedText) {
+      elements.textInput.value = normalizedText;
+    }
+
+    if (state.rawText !== normalizedText || state.sourceName !== file.name) {
+      loadText(normalizedText, file.name);
+    }
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "The PDF could not be read.";
